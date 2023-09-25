@@ -1,0 +1,5 @@
+bidirectional sync of lastfm and gonic data
+
+only stars are supported currently
+
+cli flags, env vars, and config files overlap and are parsed in the same way as gonic
