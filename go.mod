@@ -4,8 +4,9 @@ go 1.21.1
 
 require (
 	github.com/jinzhu/gorm v1.9.17-0.20211120011537-5c235b72a414
+	github.com/lithammer/fuzzysearch v1.1.8
 	github.com/peterbourgon/ff v1.7.1
-	go.senan.xyz/gonic v0.16.0-rc1.0.20230926105323-fd1852c7f06f
+	go.senan.xyz/gonic v0.16.0-rc1.0.20230926110315-b3c863c386ad
 )
 
 require (
@@ -14,5 +15,6 @@ require (
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/mattn/go-sqlite3 v1.14.17 // indirect
 	golang.org/x/net v0.15.0 // indirect
+	golang.org/x/text v0.13.0 // indirect
 	gopkg.in/gormigrate.v1 v1.6.0 // indirect
 )

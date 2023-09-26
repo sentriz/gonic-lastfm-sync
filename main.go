@@ -6,11 +6,15 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"regexp"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
+	"github.com/lithammer/fuzzysearch/fuzzy"
 	"github.com/peterbourgon/ff"
 
 	"go.senan.xyz/gonic"
@@ -71,6 +75,23 @@ func main() {
 	}
 }
 
+var searchPuncExpr = regexp.MustCompile(`[^a-zA-Z0-9\\p{L}\\p{N}]`)
+var searchReplacer = strings.NewReplacer(
+	" and ", "", " & ", "",
+	" feat. ", "", " feat ", "", " featuring ", "", " ft. ", "",
+	" vs. ", "", " vs ", "",
+	" his ", "",
+	" the ", "",
+	" with ", "",
+)
+
+func transformForSearch(inp string) string {
+	inp = strings.ToLower(inp)
+	inp = searchReplacer.Replace(inp)
+	inp = searchPuncExpr.ReplaceAllString(inp, "")
+	return inp
+}
+
 func syncStarsLastFMGonic(apiKey string, dbc *db.DB, lastfmUsername, gonicUsername string) error {
 	var user db.User
 	if err := dbc.Find(&user, "name=?", gonicUsername).Error; err != nil {
@@ -83,26 +104,33 @@ func syncStarsLastFMGonic(apiKey string, dbc *db.DB, lastfmUsername, gonicUserna
 		return fmt.Errorf("get loved tracks from lastfm: %v", err)
 	}
 
-	var saved int
-	for _, starredTrack := range resp.Tracks {
-		q := dbc.
-			Where("tracks.tag_title=? AND tracks.tag_track_artist=?", starredTrack.Name, starredTrack.Artist.Name)
+	var tracks []*db.Track
+	if err := dbc.Select("id, tag_track_artist, tag_title").Find(&tracks).Error; err != nil {
+		return fmt.Errorf("list tracks in db: %v", err)
+	}
 
-		var track db.Track
-		if err := q.Find(&track).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			return fmt.Errorf("find track in db: %v", err)
-		}
-		if track.ID == 0 {
+	var searchStrings []string
+	for _, track := range tracks {
+		searchStrings = append(searchStrings, transformForSearch(track.TagTrackArtist+track.TagTitle))
+	}
+
+	var saved int
+	for _, starred := range resp.Tracks {
+		query := transformForSearch(starred.Artist.Name + starred.Name)
+		ranks := fuzzy.RankFindNormalized(query, searchStrings)
+		if len(ranks) == 0 {
+			log.Printf("no match for %q", query)
 			continue
 		}
-
-		starDateUTS, _ := strconv.Atoi(starredTrack.Date.UTS)
-		starDate := time.Unix(int64(starDateUTS), 0)
+		sort.Sort(ranks)
+		track := tracks[ranks[0].OriginalIndex]
 
 		var star db.TrackStar
 		star.UserID = user.ID
 		star.TrackID = track.ID
-		star.StarDate = starDate
+
+		starDateUTS, _ := strconv.Atoi(starred.Date.UTS)
+		star.StarDate = time.Unix(int64(starDateUTS), 0)
 
 		if err := dbc.Save(&star).Error; err != nil {
 			return fmt.Errorf("save track star with user %d track %d: %v", user.ID, track.ID, err)
