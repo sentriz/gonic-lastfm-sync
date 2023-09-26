@@ -22,15 +22,16 @@ import (
 	"go.senan.xyz/gonic/scrobble/lastfm"
 )
 
-func main() {
+var (
+	set = flag.NewFlagSet(gonic.Name, flag.ExitOnError)
+
 	// re-use as many as the same flags as we can from gonic's main()
-	set := flag.NewFlagSet(gonic.Name, flag.ExitOnError)
+	confDBPath         = set.String("db-path", "", "path to database")
+	confGonicUsername  = set.String("gonic-username", "", "gonic username for syncing")
+	confLastfmUsername = set.String("lastfm-username", "", "lastfm username for syncing")
+)
 
-	confDBPath := set.String("db-path", "", "path to database")
-	confGonicUsername := set.String("gonic-username", "", "gonic username for syncing")
-	confLastfmUsername := set.String("lastfm-username", "", "lastfm username for syncing")
-	confMinStarDate := set.Uint("min-star-date", 0, "a unix timestamp (sec) past which gonic->lastfm stars wont be send (the date that you set gonic-lastfm-sync up for the first time)")
-
+func main() {
 	if err := ff.Parse(set, os.Args[1:],
 		ff.WithConfigFileFlag("config-path"),
 		ff.WithConfigFileParser(ff.PlainParser),
@@ -40,21 +41,23 @@ func main() {
 	}
 
 	if *confDBPath == "" {
-		log.Panicf("please provide a db path")
+		log.Fatalf("please provide a db path")
 	}
 	if *confGonicUsername == "" {
-		log.Panicf("please provide a gonic username")
+		log.Fatalf("please provide a gonic username")
 	}
 	if *confLastfmUsername == "" {
-		log.Panicf("please provide a lastfm username")
-	}
-	if *confMinStarDate == 0 {
-		log.Panicf("please provide a min star date")
+		log.Fatalf("please provide a lastfm username")
 	}
 
 	dbc, err := db.New(*confDBPath, db.DefaultOptions())
 	if err != nil {
 		log.Panicf("error opening database: %v\n", err)
+	}
+	defer dbc.Close()
+
+	if err := dbc.AutoMigrate(&LastFMSyncUploadedTrack{}).Error; err != nil {
+		log.Panicf("migrate db: %v", err)
 	}
 
 	apiKey, err := dbc.GetSetting(db.LastFMAPIKey)
@@ -65,37 +68,42 @@ func main() {
 		log.Panicf("gonic db doesn't not have a valid lastfm api key")
 	}
 
-	if err := syncStarsLastFMGonic(apiKey, dbc, *confLastfmUsername, *confGonicUsername); err != nil {
+	if err := syncStarsLastFMToGonic(apiKey, dbc, *confLastfmUsername, *confGonicUsername); err != nil {
 		log.Panicf("sync stars from lastfm to gonic: %v", err)
 	}
 
-	minStarDate := time.Unix(int64(*confMinStarDate), 0)
-	if err := syncStarsGonicLastFM(apiKey, dbc, *confLastfmUsername, *confGonicUsername, minStarDate); err != nil {
+	if err := syncStarsGonicToLastFM(apiKey, dbc, *confLastfmUsername, *confGonicUsername); err != nil {
 		log.Panicf("sync stars from gonic to lastfm: %v", err)
 	}
 }
 
-var searchPuncExpr = regexp.MustCompile(`[^a-zA-Z0-9\\p{L}\\p{N}]`)
-var searchReplacer = strings.NewReplacer(
-	" and ", "", " & ", "",
-	" feat. ", "", " feat ", "", " featuring ", "", " ft. ", "",
-	" vs. ", "", " vs ", "",
-	" his ", "",
-	" the ", "",
-	" with ", "",
+var (
+	searchFtExpr         = regexp.MustCompile(`\b(ft\.|featuring|feat|feat\.)\s+.*$`)
+	searchPuncExpr       = regexp.MustCompile(`[^a-zA-Z0-9\\p{L}\\p{N}]`)
+	searchConcatReplacer = strings.NewReplacer(
+		" and ", "", " & ", "",
+		" vs. ", "", " vs ", "",
+		" his ", "",
+		" the ", "",
+		" with ", "",
+	)
 )
 
-func transformForSearch(inp string) string {
-	inp = strings.ToLower(inp)
-	inp = searchReplacer.Replace(inp)
-	inp = searchPuncExpr.ReplaceAllString(inp, "")
-	return inp
+func searchKey(artist, track string) string {
+	artist = strings.ToLower(artist)
+	track = strings.ToLower(track)
+	artist = searchFtExpr.ReplaceAllString(artist, "")
+	track = searchFtExpr.ReplaceAllString(track, "")
+	key := artist + track
+	key = searchConcatReplacer.Replace(key)
+	key = searchPuncExpr.ReplaceAllString(key, "")
+	return key
 }
 
-func syncStarsLastFMGonic(apiKey string, dbc *db.DB, lastfmUsername, gonicUsername string) error {
+func syncStarsLastFMToGonic(apiKey string, dbc *db.DB, lastfmUsername, gonicUsername string) error {
 	var user db.User
 	if err := dbc.Find(&user, "name=?", gonicUsername).Error; err != nil {
-		log.Panicf("error finding gonic user %q: %v\n", gonicUsername, err)
+		return fmt.Errorf("find gonic user %q: %w\n", gonicUsername, err)
 	}
 
 	client := lastfm.NewClient()
@@ -111,49 +119,50 @@ func syncStarsLastFMGonic(apiKey string, dbc *db.DB, lastfmUsername, gonicUserna
 
 	var searchStrings []string
 	for _, track := range tracks {
-		searchStrings = append(searchStrings, transformForSearch(track.TagTrackArtist+track.TagTitle))
+		searchStrings = append(searchStrings, searchKey(track.TagTrackArtist, track.TagTitle))
 	}
 
 	var saved int
 	for _, starred := range resp.Tracks {
-		query := transformForSearch(starred.Artist.Name + starred.Name)
+		query := searchKey(starred.Artist.Name, starred.Name)
 		ranks := fuzzy.RankFindNormalized(query, searchStrings)
 		if len(ranks) == 0 {
 			log.Printf("no match for %q", query)
 			continue
 		}
 		sort.Sort(ranks)
+
 		track := tracks[ranks[0].OriginalIndex]
-
-		var star db.TrackStar
-		star.UserID = user.ID
-		star.TrackID = track.ID
-
 		starDateUTS, _ := strconv.Atoi(starred.Date.UTS)
-		star.StarDate = time.Unix(int64(starDateUTS), 0)
 
-		if err := dbc.Save(&star).Error; err != nil {
+		if err := dbc.Save(&db.TrackStar{UserID: user.ID, TrackID: track.ID, StarDate: time.Unix(int64(starDateUTS), 0)}).Error; err != nil {
 			return fmt.Errorf("save track star with user %d track %d: %v", user.ID, track.ID, err)
+		}
+
+		if err := dbc.Save(&LastFMSyncUploadedTrack{UserID: user.ID, TrackID: track.ID}).Error; err != nil {
+			return fmt.Errorf("save lastfm sync uploaded track: %v", err)
 		}
 
 		saved++
 	}
 
-	log.Printf("saved lastfm->gonic stars %d/%d", saved, len(resp.Tracks))
+	log.Printf("saved lastfm->gonic stars, %d of %d matched", saved, len(resp.Tracks))
 
 	return nil
 }
 
-func syncStarsGonicLastFM(apiKey string, dbc *db.DB, lastfmUsername, gonicUsername string, minStarDate time.Time) error {
+func syncStarsGonicToLastFM(apiKey string, dbc *db.DB, lastfmUsername, gonicUsername string) error {
 	var user db.User
 	if err := dbc.Find(&user, "name=?", gonicUsername).Error; err != nil {
-		log.Panicf("error finding gonic user %q: %v\n", gonicUsername, err)
+		return fmt.Errorf("find gonic user %q: %w\n", gonicUsername, err)
 	}
 
 	q := dbc.
 		Preload("TrackStar").
 		Joins("JOIN track_stars ON track_stars.track_id=tracks.id").
-		Where("track_stars.user_id=?", user.ID)
+		Joins("LEFT JOIN last_fm_sync_uploaded_tracks ON last_fm_sync_uploaded_tracks.user_id=track_stars.user_id AND last_fm_sync_uploaded_tracks.track_id=track_stars.track_id").
+		Where("track_stars.user_id=?", user.ID).
+		Where("last_fm_sync_uploaded_tracks.track_id IS NULL")
 
 	var tracks []*db.Track
 	if err := q.Find(&tracks).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -163,20 +172,22 @@ func syncStarsGonicLastFM(apiKey string, dbc *db.DB, lastfmUsername, gonicUserna
 	client := lastfm.NewClient()
 	scrobbler := lastfm.NewScrobbler(dbc, client)
 
-	var saved int
 	for _, track := range tracks {
-		if track.TrackStar.StarDate.Before(minStarDate) {
-			continue
-		}
-
 		if err := scrobbler.LoveTrack(&user, track); err != nil {
 			return fmt.Errorf("loving lastfm track: %w", err)
 		}
 
-		saved++
+		if err := dbc.Save(&LastFMSyncUploadedTrack{UserID: user.ID, TrackID: track.ID}).Error; err != nil {
+			return fmt.Errorf("save lastfm sync uploaded track: %v", err)
+		}
 	}
 
-	log.Printf("saved gonic->lastfm stars %d/%d", saved, len(tracks))
+	log.Printf("saved gonic->lastfm stars, %d new", len(tracks))
 
 	return nil
+}
+
+type LastFMSyncUploadedTrack struct {
+	UserID  int `gorm:"primary_key; not null" sql:"default: null; type:int REFERENCES users(id) ON DELETE CASCADE"`
+	TrackID int `gorm:"primary_key; not null" sql:"default: null; type:int REFERENCES tracks(id) ON DELETE CASCADE"`
 }
