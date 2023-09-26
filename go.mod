@@ -5,7 +5,7 @@ go 1.21.1
 require (
 	github.com/jinzhu/gorm v1.9.17-0.20211120011537-5c235b72a414
 	github.com/peterbourgon/ff v1.7.1
-	go.senan.xyz/gonic v0.16.0-rc1.0.20230925230623-9026c9e2c046
+	go.senan.xyz/gonic v0.16.0-rc1.0.20230926105323-fd1852c7f06f
 )
 
 require (

@@ -57,6 +57,10 @@ go.senan.xyz/gonic v0.16.0-rc1.0.20230925225112-0b8516fbe4f4 h1:yn12PmVKZUEGOIG7
 go.senan.xyz/gonic v0.16.0-rc1.0.20230925225112-0b8516fbe4f4/go.mod h1:MviI+vvFLLQz5PM/HxkO414KeKod36w1xZVUPHAfcH4=
 go.senan.xyz/gonic v0.16.0-rc1.0.20230925230623-9026c9e2c046 h1:GEr1Ydj6c+8ilHvWMsZ6ph7mAblmN5KfX+cf1baL/cY=
 go.senan.xyz/gonic v0.16.0-rc1.0.20230925230623-9026c9e2c046/go.mod h1:MviI+vvFLLQz5PM/HxkO414KeKod36w1xZVUPHAfcH4=
+go.senan.xyz/gonic v0.16.0-rc1.0.20230926004040-81bf36abc11c h1:AlyEXUAfCw1cbyM/2e9xG+23DtDtkVPd9ftzkZ6D+Ok=
+go.senan.xyz/gonic v0.16.0-rc1.0.20230926004040-81bf36abc11c/go.mod h1:MviI+vvFLLQz5PM/HxkO414KeKod36w1xZVUPHAfcH4=
+go.senan.xyz/gonic v0.16.0-rc1.0.20230926105323-fd1852c7f06f h1:IhWgkEKlaVT02/zcMWAq8av90yPoH1iCSqcWRdFLUDg=
+go.senan.xyz/gonic v0.16.0-rc1.0.20230926105323-fd1852c7f06f/go.mod h1:MviI+vvFLLQz5PM/HxkO414KeKod36w1xZVUPHAfcH4=
 golang.org/x/crypto v0.0.0-20181112202954-3d3f9f413869/go.mod h1:6SG95UA2DQfeDnfUPMdvaQW0Q7yPrPDi9nlGo2tz2b4=
 golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2/go.mod h1:djNgcEr1/C05ACkg1iLfiJU5Ep61QUkGW8qpdssI0+w=
 golang.org/x/crypto v0.0.0-20190325154230-a5d413f7728c/go.mod h1:djNgcEr1/C05ACkg1iLfiJU5Ep61QUkGW8qpdssI0+w=
