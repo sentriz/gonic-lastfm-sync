@@ -19,7 +19,7 @@ import (
 
 	"go.senan.xyz/gonic"
 	"go.senan.xyz/gonic/db"
-	"go.senan.xyz/gonic/scrobble/lastfm"
+	"go.senan.xyz/gonic/lastfm"
 )
 
 var (
@@ -56,31 +56,30 @@ func main() {
 		log.Panicf("migrate db: %v", err)
 	}
 
-	apiKey, err := dbc.GetSetting(db.LastFMAPIKey)
-	if err != nil {
-		log.Panicf("error getting lastfm api key: %v\n", err)
-	}
-	if apiKey == "" {
-		log.Panicf("gonic db doesn't not have a valid lastfm api key")
-	}
-
 	var user db.User
 	if err := dbc.Find(&user, "name=?", *confGonicUsername).Error; err != nil {
 		log.Panicf("error finding gonic user %q: %v\n", *confGonicUsername, err)
 	}
 
-	client := lastfm.NewScrobbler(dbc, lastfm.NewClient())
+	client := lastfm.NewClient(func() (string, string, error) {
+		apiKey, _ := dbc.GetSetting(db.LastFMAPIKey)
+		secret, _ := dbc.GetSetting(db.LastFMSecret)
+		if apiKey == "" || secret == "" {
+			return "", "", fmt.Errorf("not configured")
+		}
+		return apiKey, secret, nil
+	})
 
 	lastfmUser, err := client.GetCurrentUser(&user)
 	if err != nil {
 		log.Panicf("error finding lastfm user: %v\n", err)
 	}
 
-	if err := syncStarsLastFMToGonic(dbc, client, apiKey, &user, &lastfmUser); err != nil {
+	if err := syncStarsLastFMToGonic(dbc, client, &user, &lastfmUser); err != nil {
 		log.Panicf("sync stars from lastfm to gonic: %v", err)
 	}
 
-	if err := syncStarsGonicToLastFM(dbc, client, apiKey, &user); err != nil {
+	if err := syncStarsGonicToLastFM(dbc, client, &user); err != nil {
 		log.Panicf("sync stars from gonic to lastfm: %v", err)
 	}
 }
@@ -108,8 +107,8 @@ func searchKey(artist, track string) string {
 	return key
 }
 
-func syncStarsLastFMToGonic(dbc *db.DB, client *lastfm.Scrobbler, apiKey string, user *db.User, lastfmUser *lastfm.User) error {
-	resp, err := client.UserGetLovedTracks(apiKey, lastfmUser.Name)
+func syncStarsLastFMToGonic(dbc *db.DB, client *lastfm.Client, user *db.User, lastfmUser *lastfm.User) error {
+	resp, err := client.UserGetLovedTracks(lastfmUser.Name)
 	if err != nil {
 		return fmt.Errorf("get loved tracks from lastfm: %v", err)
 	}
@@ -153,7 +152,7 @@ func syncStarsLastFMToGonic(dbc *db.DB, client *lastfm.Scrobbler, apiKey string,
 	return nil
 }
 
-func syncStarsGonicToLastFM(dbc *db.DB, client *lastfm.Scrobbler, apiKey string, user *db.User) error {
+func syncStarsGonicToLastFM(dbc *db.DB, client *lastfm.Client, user *db.User) error {
 	q := dbc.
 		Preload("TrackStar").
 		Joins("JOIN track_stars ON track_stars.track_id=tracks.id").
