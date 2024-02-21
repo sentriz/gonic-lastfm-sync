@@ -5,7 +5,7 @@ go 1.21.1
 require (
 	github.com/jinzhu/gorm v1.9.17-0.20211120011537-5c235b72a414
 	github.com/lithammer/fuzzysearch v1.1.8
-	go.senan.xyz/flagconf v0.0.0-20240221151332-dd9bc9160a22
+	go.senan.xyz/flagconf v0.0.0-20240221161927-6640ce2e42fd
 	go.senan.xyz/gonic v0.16.2
 )
 
