@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -15,29 +14,24 @@ import (
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
 	"github.com/lithammer/fuzzysearch/fuzzy"
-	"github.com/peterbourgon/ff"
 
-	"go.senan.xyz/gonic"
+	"go.senan.xyz/flagconf"
 	"go.senan.xyz/gonic/db"
 	"go.senan.xyz/gonic/lastfm"
 )
 
 var (
-	set = flag.NewFlagSet(gonic.Name, flag.ExitOnError)
-
 	// re-use as many as the same flags as we can from gonic's main()
-	confDBPath        = set.String("db-path", "", "path to database")
-	confGonicUsername = set.String("gonic-username", "", "gonic username for syncing")
+	confDBPath        = flag.String("db-path", "", "path to database")
+	confConfigPath    = flag.String("config-path", "", "path to config (optional)")
+	confGonicUsername = flag.String("gonic-username", "", "gonic username for syncing")
 )
 
 func main() {
-	if err := ff.Parse(set, os.Args[1:],
-		ff.WithConfigFileFlag("config-path"),
-		ff.WithConfigFileParser(ff.PlainParser),
-		ff.WithEnvVarPrefix(gonic.NameUpper),
-	); err != nil {
-		log.Panicf("error parsing args: %v\n", err)
-	}
+	flag.CommandLine.Init("gonic", flag.ExitOnError)
+	flag.Parse()
+	flagconf.ParseEnv()
+	flagconf.ParseConfig(*confConfigPath)
 
 	if *confDBPath == "" {
 		log.Fatalf("please provide a db path")
