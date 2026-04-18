@@ -1,3 +1,4 @@
+//nolint:errcheck,gochecknoglobals
 package main
 
 import (
@@ -105,12 +106,12 @@ func searchKey(artist, track string) string {
 func syncStarsLastFMToGonic(dbc *db.DB, client *lastfm.Client, user *db.User, lastfmUser *lastfm.User) error {
 	resp, err := client.UserGetLovedTracks(lastfmUser.Name)
 	if err != nil {
-		return fmt.Errorf("get loved tracks from lastfm: %v", err)
+		return fmt.Errorf("get loved tracks from lastfm: %w", err)
 	}
 
 	var tracks []*db.Track
 	if err := dbc.Select("id, tag_track_artist, tag_title").Find(&tracks).Error; err != nil {
-		return fmt.Errorf("list tracks in db: %v", err)
+		return fmt.Errorf("list tracks in db: %w", err)
 	}
 
 	var searchStrings []string
@@ -132,11 +133,11 @@ func syncStarsLastFMToGonic(dbc *db.DB, client *lastfm.Client, user *db.User, la
 		starDateUTS, _ := strconv.Atoi(starred.Date.UTS)
 
 		if err := dbc.Save(&db.TrackStar{UserID: user.ID, TrackID: track.ID, StarDate: time.Unix(int64(starDateUTS), 0)}).Error; err != nil {
-			return fmt.Errorf("save track star with user %d track %d: %v", user.ID, track.ID, err)
+			return fmt.Errorf("save track star with user %d track %d: %w", user.ID, track.ID, err)
 		}
 
 		if err := dbc.Save(&LastFMSyncUploadedTrack{UserID: user.ID, TrackID: track.ID}).Error; err != nil {
-			return fmt.Errorf("save lastfm sync uploaded track: %v", err)
+			return fmt.Errorf("save lastfm sync uploaded track: %w", err)
 		}
 
 		saved++
@@ -166,7 +167,7 @@ func syncStarsGonicToLastFM(dbc *db.DB, client *lastfm.Client, user *db.User) er
 		}
 
 		if err := dbc.Save(&LastFMSyncUploadedTrack{UserID: user.ID, TrackID: track.ID}).Error; err != nil {
-			return fmt.Errorf("save lastfm sync uploaded track: %v", err)
+			return fmt.Errorf("save lastfm sync uploaded track: %w", err)
 		}
 	}
 
