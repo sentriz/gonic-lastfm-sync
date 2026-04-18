@@ -12,11 +12,12 @@ import (
 	"time"
 
 	"github.com/jinzhu/gorm"
-	_ "github.com/jinzhu/gorm/dialects/sqlite"
 	"github.com/lithammer/fuzzysearch/fuzzy"
 
 	"go.senan.xyz/flagconf"
+
 	"go.senan.xyz/gonic/db"
+	"go.senan.xyz/gonic/deps"
 	"go.senan.xyz/gonic/lastfm"
 )
 
@@ -40,7 +41,7 @@ func main() {
 		log.Fatalf("please provide a gonic username")
 	}
 
-	dbc, err := db.New(*confDBPath, db.DefaultOptions())
+	dbc, err := db.New(*confDBPath, deps.DBDriverOptions(), false)
 	if err != nil {
 		log.Panicf("error opening database: %v\n", err)
 	}
