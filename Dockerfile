@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:experimental
 
-FROM golang:1.23-alpine AS builder
+FROM golang:1.26-alpine AS builder
 RUN apk add -U --no-cache \
     build-base \
     ca-certificates \
@@ -11,7 +11,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     GOOS=linux go build -o lastfm-gonic-sync .
 
-FROM alpine:3.18
+FROM alpine:3.23
 COPY --from=builder /src/lastfm-gonic-sync /bin/
 VOLUME ["/data"]
 ENV GONIC_DB_PATH /data/gonic.db
